@@ -60,7 +60,7 @@ server.get('/connections/', ConnectionsController);
 //Or redirect when we're on the homepage
 server.get('/', function (req, res, next) {
   if (req.query.departureTime) {
-    res.redirect(302, req.locals.config.baseUri + '/connections/?departureTime=' + encodeURIComponent(req.locals.page.getCorrectPageId(req.query.departureTime))); 
+    res.redirect(302, req.locals.config.baseUri + '/connections/?departureTime=' + encodeURIComponent(req.locals.page.getCorrectPageId(req.query.departureTime)));
   } else {
     res.redirect(302, req.locals.config.baseUri + '/connections/');
   }

@@ -7,7 +7,11 @@ module.exports = function (request, response, next) {
   if (!request.query.departureTime) {
     response.redirect(302, request.locals.config.baseUri + '/connections/?departureTime=' + encodeURIComponent(request.locals.page.getCorrectPageId(new Date)));
   } else if (request.locals.page.getCorrectPageId(decodeURIComponent(request.query.departureTime)) !== request.query.departureTime){
-    response.redirect(302, request.locals.config.baseUri + '/connections/?departureTime=' + encodeURIComponent(request.locals.page.getCorrectPageId(request.query.departureTime)));
+    if (!request.query.departureStop) {
+      response.redirect(302, request.locals.config.baseUri + '/connections/?departureTime=' + encodeURIComponent(request.locals.page.getCorrectPageId(request.query.departureTime)));
+    } else if (request.query.departureStop) {
+      response.redirect(302, request.locals.config.baseUri + '/connections/?departureTime=' + encodeURIComponent(request.locals.page.getCorrectPageId(request.query.departureTime)) + '&departureStop=' + request.query.departureStop);
+    }
   } else {
     //2. If it is a good page, then we can start streaming out the response and a HTTP 200 OK should be returned.
     // → We will now have to create a model for the data we want to retrieve from the db
@@ -20,17 +24,22 @@ module.exports = function (request, response, next) {
       "previousPage" : request.locals.page.getPreviousPage(),
       "search" : {
         "@type" : "IriTemplate",
-        "template" : request.locals.config.baseUri + "/connections/{?departureTime}",
+        "template" : request.locals.config.baseUri + "/connections/{?departureTime}&{?departureStop}",
         "variableRepresentation" : "BasicRepresentation",
-        "mapping" : {
-          "@type" : "IriTemplateMapping",
-          "variable" : "departureTime",
-          "required" : true,
-          "property" : "http://semweb.mmlab.be/ns/linkedconnections#departureTimeQuery"
-        }
+        "mapping" : [{
+            "@type" : "IriTemplateMapping",
+            "variable" : "departureTime",
+            "required" : true,
+            "property" : "http://semweb.mmlab.be/ns/linkedconnections#departureTimeQuery"
+          }, {
+            "@type" : "IriTemplateMapping",
+            "variable" : "departureStop",
+            "required" : false,
+            "property" : "http://semweb.mmlab.be/ns/linkedconnections#departureStopQuery"
+        }]
       }
     });
-    
+
     //3. Stream output when the graph is being generated
     connections.getPage(request.locals.page, function (error, connectionsStream) {
       if (error) {

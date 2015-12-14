@@ -4,7 +4,8 @@
     "string" : "mongodb://localhost:27017/gtfs",
     "collections" : {
       "connections" : "connections",
-      "stops" : "stations"
+      "stops" : "stations",
+      "neighbours" : "neighbours"
     }
   },
   "port" : 8080,
