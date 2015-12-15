@@ -22,9 +22,9 @@ module.exports = function (request, response, next) {
       "@type" : "PagedCollection",
       "nextPage" : request.locals.page.getNextPage(),
       "previousPage" : request.locals.page.getPreviousPage(),
-      "search" : {
+      "search" : [{
         "@type" : "IriTemplate",
-        "template" : request.locals.config.baseUri + "/connections/{?departureTime}&{?departureStop}",
+        "template" : request.locals.config.baseUri + "/connections/{?departureTime}{?departureStop}",
         "variableRepresentation" : "BasicRepresentation",
         "mapping" : [{
             "@type" : "IriTemplateMapping",
@@ -37,7 +37,7 @@ module.exports = function (request, response, next) {
             "required" : false,
             "property" : "http://semweb.mmlab.be/ns/linkedconnections#departureStopQuery"
         }]
-      }
+      }]
     });
 
     //3. Stream output when the graph is being generated

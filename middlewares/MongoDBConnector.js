@@ -72,10 +72,11 @@ MongoDBConnector.getConnectionsPage = function (page, cb) {
  * Returns connections in a certain connection range around a stop
  * @param departureTime is an object describing the time of departure at the departure stop
  * @param departureStop is the stop of departuring
- * @param K holds the connection radius
+ * @param K describes the connection radius
  */
 MongoDBConnector._getNeighbouringConnections = function (departureTime, departureStop, interval, K, cb) {
   var self = this;
+  var coordinates = {}; // holds for every neighbour its coordinates
   var endDepartureTime = new Date(departureTime.getTime() + interval * 60000);
   var queryOr = [{'departureTime': {'$gte': departureTime, '$lt': endDepartureTime}, 'departureStop': departureStop}]; // holds the WHERE-clausule for the query
   if (K > 1) {
@@ -86,6 +87,11 @@ MongoDBConnector._getNeighbouringConnections = function (departureTime, departur
         var neighbourStopId = Object.keys(stop.neighbours)[j];
         var neighbour = stop.neighbours[neighbourStopId];
         if (neighbour.radius <= K) {
+          if (!coordinates[neighbourStopId]) {
+            coordinates[neighbourStopId] = {};
+            coordinates[neighbourStopId].longitude = neighbour.longitude;
+            coordinates[neighbourStopId].latitude = neighbour.latitude;
+          }
           // Build query selector
           var startDepartureTime = new Date(departureTime.getTime() + neighbour.timedistance * 1000); // time offset is in seconds
           var endDepartureTime = new Date(startDepartureTime.getTime() + interval * 60000);
@@ -93,12 +99,12 @@ MongoDBConnector._getNeighbouringConnections = function (departureTime, departur
         }
       }
       // Query connections
-      var connectionsStream = self._db.collection(self.collections['connections']).find({ $or : queryOr, 'arrivalStop' : { '$ne' : departureStop }}).sort({'departureTime': 1}).stream().pipe(new MongoDBFixStream()).pipe(new AddMetadataTransformer(stop.neighbours));
+      var connectionsStream = self._db.collection(self.collections['connections']).find({ $or : queryOr, 'arrivalStop' : { '$ne' : departureStop }}).sort({'departureTime': 1}).stream().pipe(new MongoDBFixStream()).pipe(new AddMetadataTransformer(stop.neighbours, coordinates));
       cb(null, connectionsStream);
     });
   } else {
     // Query connections
-    var connectionsStream = self._db.collection(self.collections['connections']).find({ $or : queryOr}).sort({'departureTime': 1}).stream().pipe(new MongoDBFixStream()).pipe(new AddMetadataTransformer(stop.neighbours));
+    var connectionsStream = this._db.collection(this.collections['connections']).find({ $or : queryOr}).sort({'departureTime': 1}).stream().pipe(new MongoDBFixStream());
     cb(null, connectionsStream);
   }
 };
