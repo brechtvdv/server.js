@@ -1,6 +1,7 @@
 var MongoClient = require('mongodb').MongoClient,
     MongoDBFixStream = require('./MongoDBFixStream'),
-    AddMetadataTransformer = require('./AddMetadataTransformer');
+    AddMetadataTransformer = require('./AddMetadataTransformer'),
+    Stream = require('stream');
 var MongoDBConnector = function () {
   return function (req, res, next) {
     req.db = MongoDBConnector;
@@ -26,13 +27,25 @@ MongoDBConnector.connect = function (dbstring, collections, cb) {
         cb('Error connecting to the db: ' + err);
       }
       self._db = db;
-      cb();
+      // Create index for connections
+      db.collection(collections['connections']).ensureIndex({'departureTime': 1, 'departureStop': 1}, function (err) {
+        if (err) {
+          console.error(err);
+        }
+        // Create index for neighbours search
+        self._db.collection(collections['neighbours']).ensureIndex({'stop_id': 1}, function(err) {
+          if (err) {
+            console.error(err);
+          }
+          cb();
+        });
+      });
     });
   }
 };
 
 MongoDBConnector.context = function (callback) {
-  callback({"@context" : { "lc" : "http://semweb.mmlab.be/ns/linkedconnections#", "gtfs" : "http://vocab.gtfs.org/terms#", "Connection" : "http://semweb.mmlab.be/ns/linkedconnections#Connection", "dct" : "http://purl.org/dc/terms/", "date" : "dct:date", "arrivalTime" : "lc:arrivalTime", "departureTime" : "lc:departureTime", "arrivalStop" : { "@type" : "@id", "@id" : "http://semweb.mmlab.be/ns/linkedconnections#arrivalStop" }, "departureStop" : { "@type" : "@id", "@id" : "http://semweb.mmlab.be/ns/linkedconnections#departureStop" }, "trip" : { "@type" : "@id", "@id" : "gtfs:trip" }, "route" : { "@type" : "@id", "@id" : "gtfs:route" }, "headsign" : "gtfs:headsign" }});
+  callback({"@context" : { "lc" : "http://semweb.mmlab.be/ns/linkedconnections#", "gtfs" : "http://vocab.gtfs.org/terms#", "Connection" : "http://semweb.mmlab.be/ns/linkedconnections#Connection", "dct" : "http://purl.org/dc/terms/", "date" : "dct:date", "arrivalTime" : "lc:arrivalTime", "departureTime" : "lc:departureTime", "arrivalStop" : { "@type" : "@id", "@id" : "http://semweb.mmlab.be/ns/linkedconnections#arrivalStop" }, "departureStop" : { "@type" : "@id", "@id" : "http://semweb.mmlab.be/ns/linkedconnections#departureStop" }, "trip" : { "@type" : "@id", "@id" : "gtfs:trip" }, "route" : { "@type" : "@id", "@id" : "gtfs:route" }, "headsign" : "gtfs:headsign","locationDepartureStop": { "@context": "http://schema.org/", "@id": "http://semweb.mmlab.be/ns/linkedconnections#locationDepartureStop", "@type": "GeoCoordinates", "latitude": "https://schema.org/GeoCoordinates#latitude", "longitude": "https://schema.org/GeoCoordinates#longitude" }, "locationArrivalStop": { "@context": "http://schema.org/", "@id": "http://semweb.mmlab.be/ns/linkedconnections#locationArrivalStop", "@type": "GeoCoordinates", "latitude": "https://schema.org/GeoCoordinates#latitude", "longitude": "https://schema.org/GeoCoordinates#longitude" }, "countDirectStopsArrivalStop": "http://semweb.mmlab.be/ns/linkedconnections#countDirectStopsArrivalStop", "countDirectStopsDepartureStop": "http://semweb.mmlab.be/ns/linkedconnections#countDirectStopsDepartureStop"} });
 };
 
 /**
@@ -72,41 +85,51 @@ MongoDBConnector.getConnectionsPage = function (page, cb) {
  * Returns connections in a certain connection range around a stop
  * @param departureTime is an object describing the time of departure at the departure stop
  * @param departureStop is the stop of departuring
- * @param K describes the connection radius
+ * @param K describes how many transfers are necessary between a departure stop and another stop
  */
 MongoDBConnector._getNeighbouringConnections = function (departureTime, departureStop, interval, K, cb) {
   var self = this;
   var coordinates = {}; // holds for every neighbour its coordinates
   var endDepartureTime = new Date(departureTime.getTime() + interval * 60000);
   var queryOr = [{'departureTime': {'$gte': departureTime, '$lt': endDepartureTime}, 'departureStop': departureStop}]; // holds the WHERE-clausule for the query
-  if (K > 1) {
-    // Get connections within a certain range around the stop
-    this._db.collection(this.collections['neighbours']).findOne({'stop_id': departureStop}, function(err, stop) {
-      // Build query for every neighbour
-      for (var j = 0; j < Object.keys(stop.neighbours).length; j++) {
-        var neighbourStopId = Object.keys(stop.neighbours)[j];
-        var neighbour = stop.neighbours[neighbourStopId];
-        if (neighbour.radius <= K) {
-          if (!coordinates[neighbourStopId]) {
+  // Get connections within a certain range around the stop
+  this._db.collection(this.collections['neighbours']).findOne({'stop_id': departureStop}, function(err, stop) {
+      if (stop) {
+        // Add coordinates of departure stop
+        coordinates[stop.stop_id] = {};
+        coordinates[stop.stop_id].longitude = stop.longitude;
+        coordinates[stop.stop_id].latitude = stop.latitude;
+
+        for (var j = 0; j < Object.keys(stop.neighbours).length; j++) {
+          var neighbourStopId = Object.keys(stop.neighbours)[j].toString();
+          var neighbour = stop.neighbours[neighbourStopId];
+
+          // Save coordinates
+          if (neighbour.radius <= K+1 != coordinates[neighbourStopId]) {
             coordinates[neighbourStopId] = {};
             coordinates[neighbourStopId].longitude = neighbour.longitude;
             coordinates[neighbourStopId].latitude = neighbour.latitude;
           }
-          // Build query selector
-          var startDepartureTime = new Date(departureTime.getTime() + neighbour.timedistance * 1000); // time offset is in seconds
-          var endDepartureTime = new Date(startDepartureTime.getTime() + interval * 60000);
-          queryOr.push({'departureTime': {'$gte': startDepartureTime, '$lt': endDepartureTime}, 'departureStop': neighbourStopId});
+          if (K > 0 && neighbour.radius <= K) {
+            // Build query selector
+            var startDepartureTime = new Date(departureTime.getTime() + neighbour.timedistance * 1000); // time offset is in seconds
+            var endDepartureTime = new Date(startDepartureTime.getTime() + interval * 60000);
+            queryOr.push({'departureTime': {'$gte': startDepartureTime, '$lt': endDepartureTime}, 'departureStop': neighbourStopId});
+          }
         }
+        // Query connections
+        var connectionsStream = self._db.collection(self.collections['connections']).find({ $or : queryOr, 'arrivalStop' : { '$ne' : departureStop }}).sort({'departureTime': 1}).stream().pipe(new MongoDBFixStream()).pipe(new AddMetadataTransformer(stop.neighbours, coordinates));
+        cb(null, connectionsStream);
+      } else {
+        // stop is not known by this server
+        var emptyStream = new Stream.Readable({
+          read: function(chunk, encoding, next) {
+            this.push(null);
+          }
+        });
+        cb(null, emptyStream);
       }
-      // Query connections
-      var connectionsStream = self._db.collection(self.collections['connections']).find({ $or : queryOr, 'arrivalStop' : { '$ne' : departureStop }}).sort({'departureTime': 1}).stream().pipe(new MongoDBFixStream()).pipe(new AddMetadataTransformer(stop.neighbours, coordinates));
-      cb(null, connectionsStream);
-    });
-  } else {
-    // Query connections
-    var connectionsStream = this._db.collection(this.collections['connections']).find({ $or : queryOr}).sort({'departureTime': 1}).stream().pipe(new MongoDBFixStream());
-    cb(null, connectionsStream);
-  }
+  });
 };
 
 MongoDBConnector.getStops = function (cb) {

@@ -18,8 +18,8 @@ module.exports = function (req, res, next) {
   req.locals.page.getDepartureStopInformation = function () {
     if (req.query.departureStop) {
       return {
-        range : 3, // describes how many stops futher from the departure stop connections may depart from
-        interval : interval, // Interval with the optimization should be much bigger
+        range : 5, // describes how many transfers are taken into account to reach a stop
+        interval : interval*10, // time interval of connections for every stop
         departureStop : req.query.departureStop
       };
     } else {
