@@ -24,7 +24,7 @@ module.exports = function (request, response, next) {
       "previousPage" : request.locals.page.getPreviousPage(),
       "search" : [{
         "@type" : "IriTemplate",
-        "template" : request.locals.config.baseUri + "/connections/{?departureTime}{?departureStop}",
+        "template" : request.locals.config.baseUri + "/connections/{?departureTime}{&departureStop}",
         "variableRepresentation" : "BasicRepresentation",
         "mapping" : [{
             "@type" : "IriTemplateMapping",

@@ -27,6 +27,22 @@
       "@id" : "gtfs:wheelchairAccessible",
       "@type" : "@id"
     },
-    "name" : "http://xmlns.com/foaf/0.1/name"
+    "name" : "http://xmlns.com/foaf/0.1/name",
+    "locationDepartureStop": {
+      "@context": "http://schema.org/",
+      "@id": "http://semweb.mmlab.be/ns/linkedconnections#locationDepartureStop",
+      "@type": "GeoCoordinates",
+      "latitude": "https://schema.org/GeoCoordinates#latitude",
+      "longitude": "https://schema.org/GeoCoordinates#longitude"
+    },
+    "locationArrivalStop": {
+      "@context": "http://schema.org/",
+      "@id": "http://semweb.mmlab.be/ns/linkedconnections#locationArrivalStop",
+      "@type": "GeoCoordinates",
+      "latitude": "https://schema.org/GeoCoordinates#latitude",
+      "longitude": "https://schema.org/GeoCoordinates#longitude"
+    },
+    "countDirectStopsArrivalStop": "http://semweb.mmlab.be/ns/linkedconnections#countDirectStopsArrivalStop",
+    "countDirectStopsDepartureStop": "http://semweb.mmlab.be/ns/linkedconnections#countDirectStopsDepartureStop"
   }
 }
