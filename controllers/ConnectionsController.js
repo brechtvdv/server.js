@@ -16,6 +16,8 @@ module.exports = function (request, response, next) {
     //2. If it is a good page, then we can start streaming out the response and a HTTP 200 OK should be returned.
     // → We will now have to create a model for the data we want to retrieve from the db
     var connections = new ConnectionsModel(request.db);
+    // Set page (necessary for NLCF)
+    request.locals.page.setPage();
     var view = new JSONLDView({
       "@context" : request.locals.config.baseUri + "/connections/context.json",
       "@id" : request.locals.page.getCurrentPage(),

@@ -64,10 +64,12 @@ MongoDBConnector._getMongoConnectionsStream = function (page, cb) {
   } else {
     var info = page.getDepartureStopInformation();
     var departureStop = info.departureStop;
-    var departureTime = page.getInterval().start;
-    var interval = info.interval;
-    var K = info.range;
-    this._getNeighbouringConnections(departureTime, departureStop, interval, K, cb);
+    var departureTime = info.departureTime;
+    var K = info.K;
+    var startPage = page.getInterval().start;
+    var endPage = page.getInterval().end;
+    // Calculate start and end of page
+    this._getNLCFPage(departureStop, departureTime, K, startPage, endPage, cb);
   }
 };
 
@@ -82,16 +84,19 @@ MongoDBConnector.getConnectionsPage = function (page, cb) {
 };
 
 /**
- * Returns connections in a certain connection range around a stop
- * @param departureTime is an object describing the time of departure at the departure stop
+ * Returns a page of connections of a Neighbouring Linked Connections Fragment
  * @param departureStop is the stop of departuring
+ * @param departureTime is the departure time of the fragment
  * @param K describes how many transfers are necessary between a departure stop and another stop
+ * @param startPage describes start departure time of page
+ * @param endPage describes ending departure time of page
  */
-MongoDBConnector._getNeighbouringConnections = function (departureTime, departureStop, interval, K, cb) {
+MongoDBConnector._getNLCFPage = function (departureStop, departureTime, K, startPage, endPage, cb) {
   var self = this;
   var coordinates = {}; // holds for every neighbour its coordinates
-  var endDepartureTime = new Date(departureTime.getTime() + interval * 60000);
-  var queryOr = [{'departureTime': {'$gte': departureTime, '$lt': endDepartureTime}, 'departureStop': departureStop}]; // holds the WHERE-clausule for the query
+
+  // Departure stop is always contained in the fragment
+  var queryOr = [{'departureTime': {'$gte': startPage, '$lt': endPage}, 'departureStop': departureStop}]; // holds the WHERE-clausule for the query
   // Get connections within a certain range around the stop
   this._db.collection(this.collections['neighbours']).findOne({'stop_id': departureStop}, function(err, stop) {
       if (stop) {
@@ -110,11 +115,13 @@ MongoDBConnector._getNeighbouringConnections = function (departureTime, departur
             coordinates[neighbourStopId].longitude = neighbour.longitude;
             coordinates[neighbourStopId].latitude = neighbour.latitude;
           }
-          if (K > 0 && neighbour.radius <= K) {
+          var startStop = new Date(departureTime.getTime() + neighbour.timedistance * 1000); // time offset is in seconds
+
+          var validStartStop = self._getStartOfStopWithinPage(startPage, endPage, startStop);
+          // If stop is reachable, start returning connections from that stop
+          if (validStartStop) {
             // Build query selector
-            var startDepartureTime = new Date(departureTime.getTime() + neighbour.timedistance * 1000); // time offset is in seconds
-            var endDepartureTime = new Date(startDepartureTime.getTime() + interval * 60000);
-            queryOr.push({'departureTime': {'$gte': startDepartureTime, '$lt': endDepartureTime}, 'departureStop': neighbourStopId});
+            queryOr.push({'departureTime': {'$gte': validStartStop, '$lt': endPage}, 'departureStop': neighbourStopId});
           }
         }
         // Query connections
@@ -134,6 +141,16 @@ MongoDBConnector._getNeighbouringConnections = function (departureTime, departur
 
 MongoDBConnector.getStops = function (cb) {
   this._db.collection(this.collections['stops']).find().toArray(cb);
+};
+
+MongoDBConnector._getStartOfStopWithinPage = function (startPage, endPage, startStop) {
+  debugger;
+  if (startStop <= startPage) {
+    return startPage;
+  } else if (startStop > startPage && startStop < endPage) {
+    return startStop;
+  }
+  return null;
 };
 
 module.exports = MongoDBConnector;
